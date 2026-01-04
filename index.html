@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="th">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ระบบตารางงานพนักงาน</title>
+    <style>
+        body {
+            font-family: 'Tahoma', sans-serif;
+            background-color: #f4f7f6;
+            text-align: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            max-width: 550px;
+            margin: auto;
+        }
+
+        input {
+            padding: 12px;
+            width: 80%;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            margin-bottom: 15px;
+            font-size: 16px;
+        }
+
+        button {
+            background-color: #27ae60;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: 0.3s;
+        }
+
+        button:hover {
+            background-color: #219150;
+        }
+
+        .result-card {
+            margin-top: 20px;
+            text-align: left;
+            padding: 20px;
+            border-left: 5px solid #27ae60;
+            background: #f9f9f9;
+            display: none;
+        }
+
+        .schedule-row {
+            margin-bottom: 8px;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 8px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .date-label {
+            color: #555;
+            font-size: 14px;
+        }
+
+        .work-time {
+            color: #27ae60;
+            font-weight: bold;
+        }
+
+        .day-off {
+            color: #e67e22;
+            font-weight: bold;
+        }
+
+        h2 {
+            color: #2c3e50;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h2>🔍 ตรวจสอบตารางงานและวันหยุด</h2>
+        <input type="text" id="empName" placeholder="พิมพ์ชื่อเล่นของคุณ (เช่น แพร)...">
+        <br>
+        <button onclick="searchHoliday()">ค้นหาตารางงาน</button>
+        <div id="result" class="result-card">
+            <h3 id="showName"
+                style="color: #2c3e50; border-bottom: 2px solid #27ae60; padding-bottom: 10px; margin-top: 0;"></h3>
+            <div id="scheduleContainer"></div>
+        </div>
+    </div>
+
+    <script>
+        async function searchHoliday() {
+            const inputName = document.getElementById('empName').value.trim();
+            const url = 'https://api.sheety.co/56e760a761d018c5ad7458c87a819a1b/myDatabase/sheet1';
+            if (!inputName) { alert('กรุณาพิมพ์ชื่อก่อนค้นหาครับ'); return; }
+
+            try {
+                const response = await fetch(url);
+                const data = await response.json();
+
+                // 1. หาแถวพนักงาน: กวาดหาทุกช่อง ถ้ามีคำว่า "แพร" เอาแถวนั้นมาเลย
+                const staff = data.sheet1.find(row =>
+                    Object.values(row).some(val => val && val.toString().trim() === inputName)
+                );
+
+                if (staff) {
+                    document.getElementById('result').style.display = 'block';
+                    document.getElementById('showName').innerText = 'ตารางเวลาของคุณ ' + inputName;
+
+                    // 2. ตั้งชื่อวันที่เตรียมไว้โชว์
+                    const dateLabels = [
+                        "วันจันทร์ 29/12/2025", "วันอังคาร 30/12/2025", "วันพุธ 31/12/2025",
+                        "วันพฤหัสบดี 1/1/2026", "วันศุกร์ 2/1/2026", "วันเสาร์ 3/1/2026", "วันอาทิตย์ 4/1/2026"
+                    ];
+
+                    let htmlOutput = '';
+
+                    // 3. หัวใจสำคัญ: ดึงข้อมูลตามลำดับ (คอลัมน์ D ถึง J ใน Google Sheets)
+                    // Sheety จะข้ามคอลัมน์แรกๆ ไป ดังนั้นเราจะนับจาก Property ที่ 3 เป็นต้นไป
+                    const allValues = Object.values(staff);
+                    // ตัดข้อมูลส่วนเกิน (id, รหัสพนักงาน, ชื่อพนักงาน, ชื่อเล่น) ออกไป
+                    const timeValues = allValues.slice(3);
+
+                    dateLabels.forEach((label, index) => {
+                        let value = timeValues[index] ? timeValues[index].toString().trim() : '';
+                        let displayValue = value || 'ไม่มีข้อมูล';
+
+                        // กำหนดสี
+                        let isHoliday = ['พักร้อน', 'Day Off', 'ลากิจ', 'ลาป่วย'].some(status => displayValue.includes(status));
+                        let cssClass = isHoliday ? 'day-off' : (displayValue === 'ไม่มีข้อมูล' ? '' : 'work-time');
+
+                        htmlOutput += `
+                        <div class="schedule-row">
+                            <span class="date-label">${label}</span>
+                            <span class="${cssClass}">${displayValue}</span>
+                        </div>`;
+                    });
+
+                    document.getElementById('scheduleContainer').innerHTML = htmlOutput;
+                } else {
+                    alert('ไม่พบชื่อ "' + inputName + '" ในระบบครับ');
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('เกิดข้อผิดพลาดในการโหลดข้อมูล');
+            }
+        }
+    </script>
+</body>
+
+</html>
